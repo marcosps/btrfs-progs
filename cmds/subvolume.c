@@ -223,6 +223,7 @@ static int wait_for_commit(int fd)
 
 static const char * const cmd_subvol_delete_usage[] = {
 	"btrfs subvolume delete [options] <subvolume> [<subvolume>...]",
+	"btrfs subvolume delete [options] --subvolid <subvolid> <path>",
 	"Delete subvolume(s)",
 	"Delete subvolumes from the filesystem. The corresponding directory",
 	"is removed instantly but the data blocks are removed later.",
@@ -234,6 +235,7 @@ static const char * const cmd_subvol_delete_usage[] = {
 	"-c|--commit-after      wait for transaction commit at the end of the operation",
 	"-C|--commit-each       wait for transaction commit after deleting each subvolume",
 	"-v|--verbose           verbose output of operations",
+	"-s|--subvolid          subvolume id of the to be removed subvolume",
 	NULL
 };
 
@@ -246,11 +248,12 @@ static int cmd_subvol_delete(const struct cmd_struct *cmd,
 	char	*dname, *vname, *cpath;
 	char	*dupdname = NULL;
 	char	*dupvname = NULL;
-	char	*path;
+	char	*path = NULL;
 	DIR	*dirstream = NULL;
 	int verbose = 0;
 	int commit_mode = 0;
 	u8 fsid[BTRFS_FSID_SIZE];
+	u64 objectid = 0;
 	char uuidbuf[BTRFS_UUID_UNPARSED_SIZE];
 	struct seen_fsid *seen_fsid_hash[SEEN_FSID_HASH_SIZE] = { NULL, };
 	enum { COMMIT_AFTER = 1, COMMIT_EACH = 2 };
@@ -262,11 +265,12 @@ static int cmd_subvol_delete(const struct cmd_struct *cmd,
 		static const struct option long_options[] = {
 			{"commit-after", no_argument, NULL, 'c'},
 			{"commit-each", no_argument, NULL, 'C'},
+			{"subvolid", required_argument, NULL, 's'},
 			{"verbose", no_argument, NULL, 'v'},
 			{NULL, 0, NULL, 0}
 		};
 
-		c = getopt_long(argc, argv, "cCv", long_options, NULL);
+		c = getopt_long(argc, argv, "cCvs:", long_options, NULL);
 		if (c < 0)
 			break;
 
@@ -280,12 +284,19 @@ static int cmd_subvol_delete(const struct cmd_struct *cmd,
 		case 'v':
 			verbose++;
 			break;
+		case 's':
+			objectid = arg_strtou64(optarg);
+			break;
 		default:
 			usage_unknown_option(cmd, argv);
 		}
 	}
 
 	if (check_argc_min(argc - optind, 1))
+		return 1;
+
+	/* when using --subvolid, ensure that we have only one argument */
+	if (objectid > 0 && check_argc_exact(argc - optind, 1))
 		return 1;
 
 	if (verbose > 0) {
@@ -296,8 +307,30 @@ static int cmd_subvol_delete(const struct cmd_struct *cmd,
 
 	cnt = optind;
 
+	/* check the following syntax: subvolume delete --subvolid <volid> <path> */
+	if (objectid > 0) {
+		char *subvol, full_volpath[BTRFS_SUBVOL_NAME_MAX];
+
+		path = argv[cnt];
+		err = btrfs_util_subvolume_path(path, objectid, &subvol);
+		if (err) {
+			error_btrfs_util(err);
+			ret = 1;
+			goto out;
+		}
+
+		/* build new volpath using the volume name found */
+		sprintf(full_volpath, "%s/%s", path, subvol);
+		free(subvol);
+
+		/* update path to the built path from the subvol id */
+		path = full_volpath;
+	}
+
 again:
-	path = argv[cnt];
+	/* if subvolid is used, path will already be populated */
+	if (objectid == 0)
+		path = argv[cnt];
 
 	err = btrfs_util_is_subvolume(path);
 	if (err) {
