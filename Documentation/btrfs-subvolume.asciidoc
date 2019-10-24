@@ -59,11 +59,14 @@ directory.
 Add the newly created subvolume to a qgroup. This option can be given multiple
 times.
 
-*delete* [options] <subvolume> [<subvolume>...]::
+*delete* [options] <[<subvolume> [<subvolume>...]] | [-s|--subvolid <subvolid> <path>]>::
 Delete the subvolume(s) from the filesystem.
 +
 If <subvolume> is not a subvolume, btrfs returns an error but continues if
 there are more arguments to process.
++
+If --subvolid if used, <path> must point to a btrfs filesystem. See `btrfs
+subvolume list` how to get the subvolume id.
 +
 The corresponding directory is removed instantly but the data blocks are
 removed later in the background. The command returns immediately. See `btrfs
@@ -84,6 +87,9 @@ wait for transaction commit after deleting each subvolume.
 +
 -v|--verbose::::
 verbose output of operations.
++
+-s|--subvolid::::
+subvolume id of the to be removed subvolume from <path>
 
 *find-new* <subvolume> <last_gen>::
 List the recently modified files in a subvolume, after <last_gen> generation.
