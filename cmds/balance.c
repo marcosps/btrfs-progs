@@ -659,9 +659,7 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 				i = chdir("/");
 				close(0);
 				close(1);
-				close(2);
 				open("/dev/null", O_RDONLY);
-				open("/dev/null", O_WRONLY);
 				open("/dev/null", O_WRONLY);
 				break;
 			default:
