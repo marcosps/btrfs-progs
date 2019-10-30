@@ -22,6 +22,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -507,6 +508,7 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 	int force = 0;
 	int verbose = 0;
 	int background = 0;
+	pid_t child;
 	unsigned start_flags = 0;
 	int i;
 
@@ -639,13 +641,13 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 	if (verbose)
 		dump_ioctl_balance_args(&args);
 	if (background) {
-		switch (fork()) {
+		switch (child = fork()) {
 		case (-1):
 			error("unable to fork to run balance in background");
 			return 1;
 		case (0):
 			setsid();
-			switch(fork()) {
+			switch(child = fork()) {
 			case (-1):
 				error(
 				"unable to fork to run balance in background");
@@ -663,10 +665,21 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 				open("/dev/null", O_WRONLY);
 				break;
 			default:
+				/* wait up to three seconds to check if balance
+				 * isn't already running */
+				i = 0;
+				while (waitpid(child, NULL, WNOHANG) == 0 && i++ < 3)
+					sleep(1);
+
+				/* ensure that any error message from
+				 * do_balance is flushed */
+				fflush(stderr);
 				exit(0);
 			}
 			break;
 		default:
+			/* Wait for the first child to return */
+			waitpid(child, NULL, 0);
 			exit(0);
 		}
 	}
