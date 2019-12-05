@@ -17,7 +17,7 @@ test_mkfs_mount_checksum()
 	run_check $SUDO_HELPER "$TOP/btrfs" inspect-internal dump-super "$TEST_DEV"
 	run_check $SUDO_HELPER "$TOP/btrfs" check "$TEST_DEV"
 
-	run_check $SUDO_HELPER mount "$dev1" "$TEST_MNT"
+	run_check $SUDO_HELPER mount "$TEST_DEV" "$TEST_MNT"
 	run_check "$TOP/btrfs" filesystem df "$TEST_MNT"
 	run_check $SUDO_HELPER "$TOP/btrfs" filesystem usage "$TEST_MNT"
 	run_check $SUDO_HELPER "$TOP/btrfs" device usage "$TEST_MNT"
