@@ -322,10 +322,15 @@ check_global_prereq()
 	fi
 }
 
-# check if the targets passed as arguments are available, and if not just skip
-# the test
+# check if dmsetup and targets passed as arguments are available, and skip the
+# test if they aren't.
 check_dm_target_support()
 {
+	which dmsetup &> /dev/null
+	if [ $? -ne 0 ]; then
+		_not_run "This test requires dmsetup tool.";
+	fi
+
 	setup_root_helper
 
 	for target in "$@"; do
