@@ -1259,7 +1259,7 @@ PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume_fd(int parent_fd,
 							    const char *name,
 							    int flags)
 {
-	struct btrfs_ioctl_vol_args args = {};
+	struct btrfs_ioctl_vol_args_v2 args = {};
 	enum btrfs_util_error err;
 	size_t len;
 	int ret;
@@ -1283,7 +1283,7 @@ PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume_fd(int parent_fd,
 	memcpy(args.name, name, len);
 	args.name[len] = '\0';
 
-	ret = ioctl(parent_fd, BTRFS_IOC_SNAP_DESTROY, &args);
+	ret = ioctl(parent_fd, BTRFS_IOC_SNAP_DESTROY_V2, &args);
 	if (ret == -1)
 		return BTRFS_UTIL_ERROR_SNAP_DESTROY_FAILED;
 
