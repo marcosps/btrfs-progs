@@ -5,6 +5,7 @@ source "$TEST_TOP/common"
 
 check_prereq mkfs.btrfs
 check_prereq btrfs
+check_32bit_machine "32bit machines can't handle 6E file sizes"
 
 setup_root_helper
 prepare_test_dev

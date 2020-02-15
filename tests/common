@@ -580,6 +580,21 @@ check_min_kernel_version()
 	return 0
 }
 
+check_32bit_machine()
+{
+	local msg
+
+	msg="$1"
+	if [ -z "$msg" ]; then
+		msg="Skipping test on 32bit machines"
+	fi
+
+	long_bit=$(getconf LONG_BIT)
+	if [ $long_bit -eq 32 ]; then
+		_not_run "$msg"
+	fi
+}
+
 # how many files to create.
 DATASET_SIZE=50
 
