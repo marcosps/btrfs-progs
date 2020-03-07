@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <errno.h>
@@ -91,7 +92,7 @@ static int dev_replace_handle_sigint(int fd)
 }
 
 static const char *const cmd_replace_start_usage[] = {
-	"btrfs replace start [-Bfr] <srcdev>|<devid> <targetdev> <mount_point>",
+	"btrfs replace start [options] <srcdev>|<devid> <targetdev> <mount_point>",
 	"Replace device of a btrfs filesystem.",
 	"On a live filesystem, duplicate the data to the target device which",
 	"is currently stored on the source device. If the source device is not",
@@ -104,15 +105,18 @@ static const char *const cmd_replace_start_usage[] = {
 	"from the system, you have to use the <devid> parameter format.",
 	"The <targetdev> needs to be same size or larger than the <srcdev>.",
 	"",
-	"-r     only read from <srcdev> if no other zero-defect mirror exists",
-	"       (enable this if your drive has lots of read errors, the access",
-	"       would be very slow)",
-	"-f     force using and overwriting <targetdev> even if it looks like",
-	"       containing a valid btrfs filesystem. A valid filesystem is",
-	"       assumed if a btrfs superblock is found which contains a",
-	"       correct checksum. Devices which are currently mounted are",
-	"       never allowed to be used as the <targetdev>",
-	"-B     do not background",
+	"Options:",
+	"--autoresize  automatically resizes the filesystem to it's max size if the",
+	"              <targetdev> is bigger than <srcdev>",
+	"-r            only read from <srcdev> if no other zero-defect mirror exists",
+	"              (enable this if your drive has lots of read errors, the access",
+	"              would be very slow)",
+	"-f            force using and overwriting <targetdev> even if it looks like",
+	"              containing a valid btrfs filesystem. A valid filesystem is",
+	"              assumed if a btrfs superblock is found which contains a",
+	"              correct checksum. Devices which are currently mounted are",
+	"              never allowed to be used as the <targetdev>",
+	"-B            do not background",
 	NULL
 };
 
@@ -121,6 +125,8 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 {
 	struct btrfs_ioctl_dev_replace_args start_args = {0};
 	struct btrfs_ioctl_dev_replace_args status_args = {0};
+	struct btrfs_ioctl_fs_info_args fi_args;
+	struct btrfs_ioctl_dev_info_args *di_args = NULL;
 	int ret;
 	int i;
 	int c;
@@ -129,6 +135,7 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	char *path;
 	char *srcdev;
 	char *dstdev = NULL;
+	bool auto_resize = false;
 	int avoid_reading_from_srcdev = 0;
 	int force_using_targetdev = 0;
 	u64 dstdev_block_count;
@@ -137,8 +144,13 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	u64 srcdev_size;
 	u64 dstdev_size;
 
+	enum { GETOPT_VAL_AUTORESIZE = 257 };
+	static struct option long_opts[] = {
+		{"autoresize", no_argument, NULL, GETOPT_VAL_AUTORESIZE}
+	};
+
 	optind = 0;
-	while ((c = getopt(argc, argv, "Brf")) != -1) {
+	while ((c = getopt_long(argc, argv, "Brf", long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'B':
 			do_not_background = 1;
@@ -148,6 +160,9 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 			break;
 		case 'f':
 			force_using_targetdev = 1;
+			break;
+		case GETOPT_VAL_AUTORESIZE:
+			auto_resize = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -202,42 +217,43 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 		goto leave_with_error;
 	}
 
+	ret = get_fs_info(path, &fi_args, &di_args);
+	if (ret) {
+		errno = -ret;
+		error("failed to get device info: %m");
+		free(di_args);
+		goto leave_with_error;
+	}
+	if (!fi_args.num_devices) {
+		error("no devices found");
+		free(di_args);
+		goto leave_with_error;
+	}
+
 	if (string_is_numerical(srcdev)) {
-		struct btrfs_ioctl_fs_info_args fi_args;
-		struct btrfs_ioctl_dev_info_args *di_args = NULL;
-
 		start_args.start.srcdevid = arg_strtou64(srcdev);
-
-		ret = get_fs_info(path, &fi_args, &di_args);
-		if (ret) {
-			errno = -ret;
-			error("failed to get device info: %m");
-			free(di_args);
-			goto leave_with_error;
-		}
-		if (!fi_args.num_devices) {
-			error("no devices found");
-			free(di_args);
-			goto leave_with_error;
-		}
 
 		for (i = 0; i < fi_args.num_devices; i++)
 			if (start_args.start.srcdevid == di_args[i].devid)
 				break;
 		srcdev_size = di_args[i].total_bytes;
-		free(di_args);
-		if (i == fi_args.num_devices) {
-			error("'%s' is not a valid devid for filesystem '%s'",
-				srcdev, path);
-			goto leave_with_error;
-		}
 	} else if (path_is_block_device(srcdev) > 0) {
-		strncpy((char *)start_args.start.srcdev_name, srcdev,
-			BTRFS_DEVICE_PATH_NAME_MAX);
-		start_args.start.srcdevid = 0;
-		srcdev_size = get_partition_size(srcdev);
+		for (i = 0; i < fi_args.num_devices; i++)
+			if (strcmp(srcdev, (char *)di_args[i].path) == 0)
+				break;
+
+		start_args.start.srcdevid = di_args[i].devid;
+		srcdev_size = di_args[i].total_bytes;
 	} else {
 		error("source device must be a block device or a devid");
+		goto leave_with_error;
+	}
+
+	free(di_args);
+	di_args = NULL;
+	if (i == fi_args.num_devices) {
+		error("'%s' is not a valid devid for filesystem '%s'",
+			srcdev, path);
 		goto leave_with_error;
 	}
 
@@ -309,10 +325,24 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 			goto leave_with_error;
 		}
 	}
+
+	if (ret == 0 && auto_resize && dstdev_size > srcdev_size) {
+		char amount[BTRFS_PATH_NAME_MAX + 1];
+		snprintf(amount, BTRFS_DEVICE_PATH_NAME_MAX, "%llu:max",
+						start_args.start.srcdevid);
+
+		if (resize_filesystem(amount, path)) {
+			warning("resize failed, please resize the filesystem manually");
+			goto leave_with_error;
+		}
+	}
+
 	close_file_or_dir(fdmnt, dirstream);
 	return 0;
 
 leave_with_error:
+	if (di_args)
+		free(di_args);
 	if (dstdev)
 		free(dstdev);
 	if (fdmnt != -1)
