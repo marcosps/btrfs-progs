@@ -147,4 +147,6 @@ static inline int btrfs_test_for_mixed_profiles_by_fd(int fd)
 int btrfs_check_for_mixed_profiles_by_path(const char *path);
 int btrfs_check_for_mixed_profiles_by_fd(int fd);
 
+int resize_filesystem(const char *amount, const char *path);
+
 #endif

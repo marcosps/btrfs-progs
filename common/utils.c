@@ -461,6 +461,66 @@ int pretty_size_snprintf(u64 size, char *str, size_t str_size, unsigned unit_mod
 	return snprintf(str, str_size, "%.2f%s", fraction, suffix[num_divs]);
 }
 
+int resize_filesystem(const char *amount, const char *path)
+{
+	struct btrfs_ioctl_vol_args args;
+	int fd, res, len, e;
+	DIR *dirstream = NULL;
+	struct stat st;
+
+	len = strlen(amount);
+	if (len == 0 || len >= BTRFS_VOL_NAME_MAX) {
+		error("resize value too long (%s)", amount);
+		return 1;
+	}
+
+	res = stat(path, &st);
+	if (res < 0) {
+		error("resize: cannot stat %s: %m", path);
+		return 1;
+	}
+	if (!S_ISDIR(st.st_mode)) {
+		error("resize works on mounted filesystems and accepts only\n"
+			"directories as argument. Passing file containing a btrfs image\n"
+			"would resize the underlying filesystem instead of the image.\n");
+		return 1;
+	}
+
+	fd = btrfs_open_dir(path, &dirstream, 1);
+	if (fd < 0)
+		return 1;
+
+	printf("Resize '%s' of '%s'\n", path, amount);
+	memset(&args, 0, sizeof(args));
+	strncpy_null(args.name, amount);
+	res = ioctl(fd, BTRFS_IOC_RESIZE, &args);
+	e = errno;
+	close_file_or_dir(fd, dirstream);
+	if( res < 0 ){
+		switch (e) {
+		case EFBIG:
+			error("unable to resize '%s': no enough free space",
+				path);
+			break;
+		default:
+			error("unable to resize '%s': %m", path);
+			break;
+		}
+		return 1;
+	} else if (res > 0) {
+		const char *err_str = btrfs_err_str(res);
+
+		if (err_str) {
+			error("resizing of '%s' failed: %s", path, err_str);
+		} else {
+			error("resizing of '%s' failed: unknown error %d",
+				path, res);
+		}
+		return 1;
+	}
+	return 0;
+}
+
 /*
  * Checks to make sure that the label matches our requirements.
  * Returns:
