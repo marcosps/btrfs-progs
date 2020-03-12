@@ -343,6 +343,7 @@ static void print_usage(int ret)
 	printf("  features:\n");
 	printf("\t--csum TYPE\n");
 	printf("\t--checksum TYPE         checksum algorithm to use (default: crc32c)\n");
+	printf("\t--quota                 enable quota when creating the filesystem\n");
 	printf("\t-n|--nodesize SIZE      size of btree nodes\n");
 	printf("\t-s|--sectorsize SIZE    data block size (may not be mountable by current kernel)\n");
 	printf("\t-O|--features LIST      comma separated list of filesystem features (use '-O list-all' to list features)\n");
@@ -773,6 +774,92 @@ out:
 	return ret;
 }
 
+static int create_quota_tree(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_root *root;
+	struct btrfs_key key;
+	struct btrfs_qgroup_status_item *qstatus;
+	struct btrfs_qgroup_info_item *qinfo;
+	struct btrfs_qgroup_limit_item *qlimit;
+	struct btrfs_path path;
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct extent_buffer *leaf;
+	int ret = 0;
+
+	ASSERT(fs_info->quota_root == NULL);
+	root = btrfs_create_tree(trans, fs_info, BTRFS_QUOTA_TREE_OBJECTID);
+	if (IS_ERR(root)) {
+		ret = PTR_ERR(root);
+		goto out;
+	}
+
+	btrfs_init_path(&path);
+	key.objectid = 0;
+	key.type = BTRFS_QGROUP_STATUS_KEY;
+	key.offset = 0;
+	ret = btrfs_insert_empty_item(trans, root, &path, &key,
+			sizeof(*qstatus));
+	if (ret)
+		goto out_free_path;
+
+	leaf = path.nodes[0];
+	qstatus = btrfs_item_ptr(leaf, path.slots[0]
+			, struct btrfs_qgroup_status_item);
+	btrfs_set_qgroup_status_generation(leaf, qstatus, trans->transid);
+	btrfs_set_qgroup_status_version(leaf, qstatus, 1);
+	btrfs_set_qgroup_status_flags(leaf, qstatus
+				, BTRFS_QGROUP_STATUS_FLAG_ON |
+				  BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT);
+	btrfs_set_qgroup_status_rescan(leaf, qstatus, 0);
+	btrfs_mark_buffer_dirty(leaf);
+	btrfs_release_path(&path);
+
+	key.objectid = 0;
+	key.type = BTRFS_QGROUP_INFO_KEY;
+	key.offset = BTRFS_FS_TREE_OBJECTID;
+
+	ret = btrfs_insert_empty_item(trans, root, &path, &key,
+			sizeof(*qinfo));
+	if (ret)
+		goto out_free_path;
+
+	leaf = path.nodes[0];
+	qinfo = btrfs_item_ptr(leaf, path.slots[0]
+			, struct btrfs_qgroup_info_item);
+	btrfs_set_qgroup_info_generation(leaf, qinfo, trans->transid);
+	btrfs_set_qgroup_info_referenced(leaf, qinfo, 0);
+	btrfs_set_qgroup_info_referenced_compressed(leaf, qinfo, 0);
+	btrfs_set_qgroup_info_exclusive(leaf, qinfo, 0);
+	btrfs_set_qgroup_info_exclusive_compressed(leaf, qinfo, 0);
+	btrfs_mark_buffer_dirty(leaf);
+	btrfs_release_path(&path);
+
+	key.objectid = 0;
+	key.type = BTRFS_QGROUP_LIMIT_KEY;
+	key.offset = BTRFS_FS_TREE_OBJECTID;
+
+	ret = btrfs_insert_empty_item(trans, root, &path, &key,
+			sizeof(*qlimit));
+	if (ret)
+		goto out_free_path;
+
+	leaf = path.nodes[0];
+	qlimit = btrfs_item_ptr(leaf, path.slots[0]
+			, struct btrfs_qgroup_limit_item);
+	btrfs_set_qgroup_limit_flags(leaf, qlimit, 0);
+	btrfs_set_qgroup_limit_max_referenced(leaf, qlimit, 0);
+	btrfs_set_qgroup_limit_max_exclusive(leaf, qlimit, 0);
+	btrfs_set_qgroup_limit_rsv_referenced(leaf, qlimit, 0);
+	btrfs_set_qgroup_limit_rsv_exclusive(leaf, qlimit, 0);
+	btrfs_mark_buffer_dirty(leaf);
+
+out_free_path:
+	btrfs_release_path(&path);
+out:
+	btrfs_abort_transaction(trans, ret);
+	return ret;
+}
+
 static int create_uuid_tree(struct btrfs_trans_handle *trans)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
@@ -829,6 +916,7 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	char *source_dir = NULL;
 	bool source_dir_set = false;
 	bool shrink_rootdir = false;
+	bool enable_quota = false;
 	u64 source_dir_size = 0;
 	u64 min_dev_size;
 	u64 shrink_size;
@@ -844,7 +932,8 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 
 	while(1) {
 		int c;
-		enum { GETOPT_VAL_SHRINK = 257, GETOPT_VAL_CHECKSUM };
+		enum { GETOPT_VAL_SHRINK = 257, GETOPT_VAL_CHECKSUM
+			, GETOPT_VAL_QUOTA };
 		static const struct option long_options[] = {
 			{ "alloc-start", required_argument, NULL, 'A'},
 			{ "byte-count", required_argument, NULL, 'b' },
@@ -852,6 +941,7 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 				GETOPT_VAL_CHECKSUM },
 			{ "checksum", required_argument, NULL,
 				GETOPT_VAL_CHECKSUM },
+			{ "quota", no_argument, NULL, GETOPT_VAL_QUOTA },
 			{ "force", no_argument, NULL, 'f' },
 			{ "leafsize", required_argument, NULL, 'l' },
 			{ "label", required_argument, NULL, 'L'},
@@ -951,6 +1041,9 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 				break;
 			case GETOPT_VAL_CHECKSUM:
 				csum_type = parse_csum_type(optarg);
+				break;
+			case GETOPT_VAL_QUOTA:
+				enable_quota = true;
 				break;
 			case GETOPT_VAL_HELP:
 			default:
@@ -1226,6 +1319,14 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	if (IS_ERR(trans)) {
 		error("failed to start transaction");
 		goto error;
+	}
+
+	if (enable_quota) {
+		ret = create_quota_tree(trans);
+		if (ret) {
+			error("unable to create quota tree: %d", ret);
+			goto out;
+		}
 	}
 
 	ret = create_data_block_groups(trans, root, mixed, &allocation);
