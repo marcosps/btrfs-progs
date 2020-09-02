@@ -104,11 +104,14 @@ static int __ext2_add_one_block(ext2_filsys fs, char *bitmap,
 {
 	unsigned long offset;
 	unsigned i;
+	u64 total = 0;
 	int ret = 0;
 
 	offset = fs->super->s_first_data_block;
 	offset /= EXT2FS_CLUSTER_RATIO(fs);
 	offset += group_nr * EXT2_CLUSTERS_PER_GROUP(fs->super);
+	fprintf(stderr, "%s group_nr %lu, cluter_ratio: %u, cluster_per_group: %u, initial offset: %lu\n",
+			__func__, group_nr, EXT2FS_CLUSTER_RATIO(fs), EXT2_CLUSTERS_PER_GROUP(fs->super), offset);
 	for (i = 0; i < EXT2_CLUSTERS_PER_GROUP(fs->super); i++) {
 		if ((i + offset) >= ext2fs_blocks_count(fs->super))
 			break;
@@ -122,8 +125,11 @@ static int __ext2_add_one_block(ext2_filsys fs, char *bitmap,
 						     fs->blocksize);
 			if (ret < 0)
 				break;
+			total += fs->blocksize;
 		}
 	}
+
+	fprintf(stderr, "%s BG: %lu, total: %llu\n", __func__, group_nr, total);
 	return ret;
 }
 

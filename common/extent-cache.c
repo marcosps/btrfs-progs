@@ -307,16 +307,23 @@ int add_merge_cache_extent(struct cache_tree *tree, u64 start, u64 size)
 		next_merged = 1;
 		next->size = next->start + next->size - start;
 		next->start = start;
+		if (getenv("MARCOS_DEBUG"))
+			fprintf(stderr, "%s merging start %llu size %llu with next start %llu size %llu\n", __func__, start, size, next->start, next->size);
 	}
 	if (prev && prev->start + prev->size == start) {
 		prev_merged = 1;
 		if (next_merged) {
 			next->size = next->start + next->size - prev->start;
 			next->start = prev->start;
+			if (getenv("MARCOS_DEBUG"))
+				fprintf(stderr, "%s merging prev and next start %llu size %llu with new start %llu size %llu (removing prev)\n", __func__, start, size, next->start, next->size);
+
 			remove_cache_extent(tree, prev);
 			free(prev);
 		} else {
 			prev->size = start + size - prev->start;
+			if (getenv("MARCOS_DEBUG"))
+				fprintf(stderr, "%s merging only prev start %llu size %llu with prev start %llu size %llu\n", __func__, start, size, prev->start, prev->size);
 		}
 	}
 insert:

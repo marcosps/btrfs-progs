@@ -21,7 +21,3 @@ for i in $(seq 1 4); do
 done
 
 umount mnt
-
-gcc sample.c -o sample -lext2fs -l com_err
-
-./sample test.img

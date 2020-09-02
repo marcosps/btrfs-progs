@@ -1,0 +1,70 @@
+__ext2_add_one_block group_nr 0, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 0
+add_cache_extent start 0, size 4096
+__ext2_add_one_block BG: 0, total: 84504576
+__ext2_add_one_block group_nr 1, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 32768
+add_cache_extent start 134217728, size 4096
+add_cache_extent start 142606336, size 4096
+__ext2_add_one_block BG: 1, total: 126357504
+__ext2_add_one_block group_nr 2, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 65536
+__ext2_add_one_block BG: 2, total: 134217728
+__ext2_add_one_block group_nr 3, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 98304
+add_cache_extent start 411041792, size 4096
+__ext2_add_one_block BG: 3, total: 126357504
+__ext2_add_one_block group_nr 4, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 131072
+__ext2_add_one_block BG: 4, total: 134217728
+__ext2_add_one_block group_nr 5, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 163840
+add_cache_extent start 679477248, size 4096
+__ext2_add_one_block BG: 5, total: 126357504
+__ext2_add_one_block group_nr 6, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 196608
+__ext2_add_one_block BG: 6, total: 134217728
+__ext2_add_one_block group_nr 7, cluter_ratio: 1, cluster_per_group: 32768, initial offset: 229376
+add_cache_extent start 947912704, size 4096
+add_cache_extent start 1048576000, size 4096
+add_cache_extent start 1056964608, size 4096
+add_cache_extent start 1065353216, size 4096
+__ext2_add_one_block BG: 7, total: 113774592
+calculate_available_space insert data chunk star: 0 size: 84504576
+add_cache_extent start 0, size 84504576
+calculate_available_space insert data chunk star: 134217728 size: 33554432
+add_cache_extent start 134217728, size 33554432
+calculate_available_space insert data chunk star: 167772160 size: 235409408
+calculate_available_space insert data chunk star: 403181568 size: 268435456
+calculate_available_space insert data chunk star: 671617024 size: 268435456
+calculate_available_space insert data chunk star: 940052480 size: 105377792
+calculate_available_space insert data chunk star: 1045430272 size: 28311552
+wipe_one_reserved_range start 0 len 1048576 FOUND, cache start 0 size 84504576
+wipe_one_reserved_range cache start 0 size 83456000, removing extent
+wipe_one_reserved_range start 67108864 len 65536 FOUND, cache start 1048576 size 83456000
+add_cache_extent start 67174400, size 17330176
+wipe_one_reserved_range cache start 274877906944 len 65536 not found, returning
+calculate_available_space iter dat chunk start: 1048576 size: 66060288, cur_off: 0
+calculate_available_space insert free space start: 0 size: 1048576
+add_cache_extent start 0, size 1048576
+calculate_available_space iter dat chunk start: 67174400 size: 17330176, cur_off: 67108864
+calculate_available_space insert free space start: 67108864 size: 65536
+add_cache_extent start 67108864, size 65536
+calculate_available_space iter dat chunk start: 134217728 size: 939524096, cur_off: 84504576
+calculate_available_space insert free space start: 84541440 size: 49676288
+add_cache_extent start 84541440, size 49676288
+wipe_one_reserved_range start 0 len 1048576 FOUND, cache start 0 size 1048576
+wipe_one_reserved_range cache start 0 size 1048576 new start: 1048576, new size: 0
+wipe_one_reserved_range start 67108864 len 65536 FOUND, cache start 67108864 size 65536
+wipe_one_reserved_range cache start 67108864 size 65536 new start: 67174400, new size: 0
+wipe_one_reserved_range cache start 274877906944 len 65536 not found, returning
+copy_free_space_tree start: 84541440, size: 49676288
+add_cache_extent start 84541440, size 49676288
+copy_free_space_tree FINISH
+add_cache_extent start 0, size 84504576
+add_cache_extent start 134217728, size 528384
+add_cache_extent start 142606336, size 260575232
+add_cache_extent start 411041792, size 260575232
+add_cache_extent start 679477248, size 260575232
+add_cache_extent start 947912704, size 97517568
+add_cache_extent start 1048576000, size 5242880
+add_cache_extent start 1056964608, size 5242880
+add_cache_extent start 1065353216, size 5242880
+wipe_one_reserved_range start 0 len 1048576 FOUND, cache start 0 size 84504576
+wipe_one_reserved_range cache start 0 size 83456000, removing extent
+wipe_one_reserved_range start 67108864 len 65536 FOUND, cache start 1048576 size 83456000
+add_cache_extent start 67174400, size 17330176
+wipe_one_reserved_range cache start 274877906944 len 65536 not found, returning

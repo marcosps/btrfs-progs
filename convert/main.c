@@ -539,8 +539,12 @@ static int wipe_one_reserved_range(struct cache_tree *tree,
 	min_stripe_size /= 2;
 
 	cache = lookup_cache_extent(tree, start, len);
-	if (!cache)
+	if (!cache) {
+		fprintf(stderr, "%s cache start %llu len %llu not found, returning\n", __func__, start, len);
 		return 0;
+	}
+
+	fprintf(stderr, "%s start %llu len %llu FOUND, cache start %llu size %llu\n", __func__, start, len, cache->start, cache->size);
 
 	if (start <= cache->start) {
 		/*
@@ -548,7 +552,10 @@ static int wipe_one_reserved_range(struct cache_tree *tree,
 		 * |-wipe-|
 		 */
 		BUG_ON(start + len <= cache->start);
-
+		if (cache->size - (start + len - cache->start) == 0)
+			fprintf(stderr, "%s cache start %llu size %llu, new size is zero, removing extent\n", __func__, cache->start, cache->size);
+		else
+			fprintf(stderr, "%s cache start %llu size %llu new start: %llu, new size: %llu\n", __func__, cache->start, cache->size, start + len, cache->size - (start + len - cache->start));
 		/*
 		 * The wipe size is smaller than min_stripe_size / 2,
 		 * so the result length should still meet min_stripe_size
@@ -556,6 +563,7 @@ static int wipe_one_reserved_range(struct cache_tree *tree,
 		 */
 		cache->size -= (start + len - cache->start);
 		if (cache->size == 0) {
+
 			remove_cache_extent(tree, cache);
 			free(cache);
 			return 0;
@@ -576,6 +584,8 @@ static int wipe_one_reserved_range(struct cache_tree *tree,
 		u64 insert_start = start + len;
 		u64 insert_len;
 
+		fprintf(stderr, "%s intersection cache start %llu size %llu new size: %llu\n", __func__, cache->start, cache->size, start - cache->start);
+
 		cache->size = start - cache->start;
 		/* Expand the leading half part if needed */
 		if (ensure_size && cache->size < min_stripe_size) {
@@ -587,12 +597,16 @@ static int wipe_one_reserved_range(struct cache_tree *tree,
 
 		/* And insert the new one */
 		insert_len = old_start + old_len - start - len;
+
+		fprintf(stderr, "%s intersection insert new start %llu size %llu\n", __func__, insert_start, insert_len);
+
 		ret = add_merge_cache_extent(tree, insert_start, insert_len);
 		if (ret < 0)
 			return ret;
 
 		/* Expand the last half part if needed */
 		if (ensure_size && insert_len < min_stripe_size) {
+			fprintf(stderr, "%s intersection expanding start %llu size %llu\n", __func__, insert_start, insert_len);
 			cache = lookup_cache_extent(tree, insert_start,
 						    insert_len);
 			if (!cache || cache->start != insert_start ||
@@ -610,6 +624,7 @@ static int wipe_one_reserved_range(struct cache_tree *tree,
 	 * Wipe len should be small enough and no need to expand the
 	 * remaining extent
 	 */
+	fprintf(stderr, "%s start %llu len %llu cache->start %llu new size: %llu\n", __func__, start, len, cache->start, start - cache->start);
 	cache->size = start - cache->start;
 	BUG_ON(ensure_size && cache->size < min_stripe_size);
 	return 0;
@@ -663,19 +678,36 @@ static int calculate_available_space(struct btrfs_convert_context *cctx)
 	     cache = next_cache_extent(cache)) {
 		u64 cur_len;
 
-		if (cache->start + cache->size < cur_off)
+		fprintf(stderr, "%s iter used tree start: %llu size: %llu, cur_off: %llu\n",
+				__func__, cache->start, cache->size, cur_off);
+
+		if (cache->start + cache->size < cur_off) {
+			fprintf(stderr, "%s cache->start %llu and cache->size %llu offset: %llu intersects with latest added extent offset %llu\n",
+					__func__, cache->start, cache->size, cache->start + cache->size, cur_off);
 			continue;
+		}
 		if (cache->start > cur_off + min_stripe_size)
 			cur_off = cache->start;
 		cur_len = max(cache->start + cache->size - cur_off,
 			      min_stripe_size);
 		/* data chunks should never exceed device boundary */
 		cur_len = min(cctx->total_bytes - cur_off, cur_len);
+		fprintf(stderr, "%s insert data chunk start: %llu size: %llu\n", __func__, cur_off, cur_len);
 		ret = add_merge_cache_extent(data_chunks, cur_off, cur_len);
 		if (ret < 0)
 			goto out;
 		cur_off += cur_len;
+		fprintf(stderr, "\n");
 	}
+
+	fprintf(stderr, "\n");
+	fprintf(stderr, "%s current data chunk tree before wipe\n", __func__);
+	for (cache = first_cache_extent(data_chunks); cache;
+	     cache = next_cache_extent(cache)) {
+		fprintf(stderr, "\tstart %llu size %llu\n", cache->start, cache->size);
+	}
+
+	fprintf(stderr, "\n");
 	/*
 	 * remove reserved ranges, so we won't ever bother relocating an old
 	 * filesystem extent to other place.
@@ -684,6 +716,14 @@ static int calculate_available_space(struct btrfs_convert_context *cctx)
 	if (ret < 0)
 		goto out;
 
+	fprintf(stderr, "\n");
+	fprintf(stderr, "%s current data chunk tree after wipe\n", __func__);
+	for (cache = first_cache_extent(data_chunks); cache;
+	     cache = next_cache_extent(cache)) {
+		fprintf(stderr, "\tstart %llu size %llu\n", cache->start, cache->size);
+	}
+
+	fprintf(stderr, "\n");
 	cur_off = 0;
 	/*
 	 * Calculate free space
@@ -693,6 +733,8 @@ static int calculate_available_space(struct btrfs_convert_context *cctx)
 	 */
 	for (cache = first_cache_extent(data_chunks); cache;
 	     cache = next_cache_extent(cache)) {
+		fprintf(stderr, "%s iter data chunk start: %llu size: %llu, cur_off: %llu\n",
+				__func__, cache->start, cache->size, cur_off);
 		if (cache->start < cur_off)
 			continue;
 		if (cache->start > cur_off) {
@@ -703,6 +745,7 @@ static int calculate_available_space(struct btrfs_convert_context *cctx)
 						      BTRFS_STRIPE_LEN);
 			insert_start = round_up(cur_off, BTRFS_STRIPE_LEN);
 
+			fprintf(stderr, "%s insert free space start: %llu size: %llu\n", __func__, insert_start, len);
 			ret = add_merge_cache_extent(free, insert_start, len);
 			if (ret < 0)
 				goto out;
@@ -719,10 +762,28 @@ static int calculate_available_space(struct btrfs_convert_context *cctx)
 		ret = add_merge_cache_extent(free, insert_start, len);
 		if (ret < 0)
 			goto out;
+		fprintf(stderr, "%s insert last free space start: %llu size: %llu\n", __func__, insert_start, len);
 	}
 
+	fprintf(stderr, "\n");
+	fprintf(stderr, "%s current free tree before wipe\n", __func__);
+	for (cache = first_cache_extent(free); cache;
+	     cache = next_cache_extent(cache)) {
+		fprintf(stderr, "\tstart %llu size %llu\n", cache->start, cache->size);
+	}
+
+	fprintf(stderr, "\n");
 	/* Remove reserved bytes */
 	ret = wipe_reserved_ranges(free, min_stripe_size, 0);
+
+	fprintf(stderr, "\n");
+	fprintf(stderr, "%s current free tree after wipe\n", __func__);
+	for (cache = first_cache_extent(free); cache;
+	     cache = next_cache_extent(cache)) {
+		fprintf(stderr, "\tstart %llu size %llu\n", cache->start, cache->size);
+	}
+	fprintf(stderr, "\n");
+
 out:
 	return ret;
 }
@@ -737,11 +798,14 @@ static int copy_free_space_tree(struct btrfs_convert_context *cctx)
 	for (cache = search_cache_extent(src, 0);
 	     cache;
 	     cache = next_cache_extent(cache)) {
+		fprintf(stderr, "%s start: %llu, size: %llu\n", __func__, cache->start, cache->size);
 		ret = add_merge_cache_extent(dst, cache->start, cache->size);
 		if (ret < 0)
 			return ret;
 		cctx->free_bytes_initial += cache->size;
 	}
+
+	fprintf(stderr, "%s FINISH\n", __func__);
 	return ret;
 }
 
@@ -756,6 +820,8 @@ static int convert_read_used_space(struct btrfs_convert_context *cctx)
 	ret = cctx->convert_ops->read_used_space(cctx);
 	if (ret)
 		return ret;
+
+	setenv("MARCOS_DEBUG", "1", 1);
 
 	ret = calculate_available_space(cctx);
 	if (ret < 0)
