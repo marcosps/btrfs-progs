@@ -812,8 +812,10 @@ int make_convert_btrfs(int fd, struct btrfs_mkfs_config *cfg,
 	 */
 	ret = reserve_free_space(free_space, BTRFS_STRIPE_LEN,
 				 &cfg->super_bytenr);
-	if (ret < 0)
+	if (ret < 0) {
+		error("failed to reserve %d bytes from free space for temporary superblock", BTRFS_STRIPE_LEN);
 		goto out;
+	}
 
 	/*
 	 * Then reserve system chunk space
@@ -823,12 +825,16 @@ int make_convert_btrfs(int fd, struct btrfs_mkfs_config *cfg,
 	 */
 	ret = reserve_free_space(free_space, BTRFS_MKFS_SYSTEM_GROUP_SIZE,
 				 &sys_chunk_start);
-	if (ret < 0)
+	if (ret < 0) {
+		error("failed to reserve %d bytes from free space for system chunk", BTRFS_MKFS_SYSTEM_GROUP_SIZE);
 		goto out;
+	}
 	ret = reserve_free_space(free_space, BTRFS_CONVERT_META_GROUP_SIZE,
 				 &meta_chunk_start);
-	if (ret < 0)
+	if (ret < 0) {
+		error("failed to reserve %d bytes from free space for metadata chunk", BTRFS_CONVERT_META_GROUP_SIZE);
 		goto out;
+	}
 
 	/*
 	 * Allocated meta/sys chunks will be mapped 1:1 with device offset.
