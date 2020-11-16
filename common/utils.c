@@ -1248,7 +1248,7 @@ int ask_user(const char *question)
  * return 1 if a mount point is found but not btrfs
  * return <0 if something goes wrong
  */
-int find_mount_root(const char *path, char **mount_root)
+int find_mount_root(const char *path, const char *data, u8 flag, char **mount_root)
 {
 	FILE *mnttab;
 	int fd;
@@ -1258,6 +1258,8 @@ int find_mount_root(const char *path, char **mount_root)
 	int not_btrfs = 1;
 	int longest_matchlen = 0;
 	char *longest_match = NULL;
+	char *cmp_field = NULL;
+	bool found;
 
 	fd = open(path, O_RDONLY | O_NOATIME);
 	if (fd < 0)
@@ -1269,8 +1271,19 @@ int find_mount_root(const char *path, char **mount_root)
 		return -errno;
 
 	while ((ent = getmntent(mnttab))) {
-		len = strlen(ent->mnt_dir);
-		if (strncmp(ent->mnt_dir, path, len) == 0) {
+		if (flag & BTRFS_FIND_ROOT_PATH)
+			cmp_field = ent->mnt_dir;
+		else /* BTRFS_FIND_ROOT_OPTS */
+			cmp_field = ent->mnt_opts;
+
+		len = strlen(cmp_field);
+
+		if (flag & BTRFS_FIND_ROOT_PATH)
+			found = strncmp(cmp_field, data, len) == 0;
+		else /* BTRFS_FIND_ROOT_OPTS */
+			found = strstr(cmp_field, data) != NULL;
+
+		if (found) {
 			/* match found and use the latest match */
 			if (longest_matchlen <= len) {
 				free(longest_match);
