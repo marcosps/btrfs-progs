@@ -245,15 +245,29 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 				path_ptr[-1] = '\0';
 				path_fd = fd;
 			} else {
-				path_ptr[-1] = '/';
-				ret = snprintf(path_ptr, bytes_left, "%s",
-						name);
-				free(name);
-				if (ret >= bytes_left) {
-					error("path buffer too small: %d bytes",
-							bytes_left - ret);
+				char *mounted = NULL;
+				char volid_str[PATH_MAX];
+
+				/*
+				 * btrfs_list_path_for_root returns the full
+				 * path to the subvolume pointed by root, but the
+				 * subvolume can be mounted in a directory name
+				 * different from the subvolume name. In this
+				 * case we need to find the correct mountpoint
+				 * using same subvol path and subvol id found
+				 * before.
+				 */
+				snprintf(volid_str, PATH_MAX, "subvolid=%llu,subvol=/%s",
+						root, name);
+
+				ret = find_mount_root(full_path, volid_str,
+						BTRFS_FIND_ROOT_OPTS, &mounted);
+				if (ret < 0)
 					goto out;
-				}
+
+				strncpy(full_path, mounted, PATH_MAX);
+				free(mounted);
+
 				path_fd = btrfs_open_dir(full_path, &dirs, 1);
 				if (path_fd < 0) {
 					ret = -ENOENT;
