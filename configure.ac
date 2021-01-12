@@ -265,6 +265,9 @@ PKG_STATIC(UUID_LIBS_STATIC, [uuid])
 PKG_CHECK_MODULES(ZLIB, [zlib])
 PKG_STATIC(ZLIB_LIBS_STATIC, [zlib])
 
+PKG_CHECK_MODULES(MOUNT, [mount])
+PKG_STATIC(MOUNT_LIBS_STATIC, [mount])
+
 AC_ARG_ENABLE([zstd],
 	AS_HELP_STRING([--disable-zstd], [build without zstd support]),
 	[], [enable_zstd=yes]
