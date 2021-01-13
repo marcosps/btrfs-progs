@@ -249,7 +249,8 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 				strncpy(mount_path, full_path, PATH_MAX);
 			} else {
 				char *mounted = NULL;
-				char volid_str[PATH_MAX];
+				char subvol[PATH_MAX];
+				char subvolid[PATH_MAX];
 
 				/*
 				 * btrfs_list_path_for_root returns the full
@@ -260,13 +261,20 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 				 * using same subvol path and subvol id found
 				 * before.
 				 */
-				snprintf(volid_str, PATH_MAX, "subvolid=%llu,subvol=/%s",
-						root, name);
 
-				ret = find_mount_root(full_path, volid_str,
-						BTRFS_FIND_ROOT_OPTS, &mounted);
+				snprintf(subvol, PATH_MAX, "subvol=/%s", name);
+				snprintf(subvolid, PATH_MAX, "subvolid=%llu",
+									root);
 
-				if (ret == -ENOENT) {
+				ret = find_mount_fsroot(subvol, subvolid,
+								&mounted);
+
+				if (!ret) {
+					error("Error to parse mountinfo");
+					goto out;
+				}
+
+				if (!mounted) {
 					printf("inode %llu subvol %s could not be accessed: not mounted\n",
 							inum, name);
 					continue;
